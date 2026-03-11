@@ -10,6 +10,7 @@ typedef struct {
 int main() {
 
   int counter = 42;
+  int *p_counter = &counter;
   char grade = 'A';
   float pi = 3.14f;
   char greeting[16] = "Hello, memviz!";

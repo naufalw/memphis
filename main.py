@@ -1,7 +1,7 @@
 import argparse
 import re
 
-from aesthetics import read_key, render_var
+from aesthetics import GRN, R, read_key, render_var
 from gdb import GDB
 from parser_gdb import (
     heap_size,
@@ -27,10 +27,12 @@ def snapshot(gdb, variables):
         if is_pointer(var["type"]):
             target = read_pointer(gdb, var["addr"])
             if target:
-                print(f"\n  Points to ──→  {target}")
+                print(f"  Points to ──→  {target}")
                 hsize = heap_size(gdb, target)
                 if hsize:
-                    print(f"\n  [HEAP {target}]  {hsize} bytes  ←── {var['name']}")
+                    print(
+                        f"\n{GRN}  [HEAP {target}]{R}  {hsize} bytes  ←── {var['name']}",
+                    )
                     heap_raw = read_bytes(gdb, target, hsize)
                     render_var(
                         {
