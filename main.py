@@ -18,8 +18,7 @@ from parser_gdb import (
 
 
 def snapshot(gdb, variables):
-    print("\033[2J\033[H", end="")
-
+    print("\033[2J\033[3J\033[H", end="", flush=True)
     fname, func, lineno, src = current_line(gdb)
     print(f"\n  {fname}  {func}()  line {lineno}")
     print(f"  ▶  {src}\n")
