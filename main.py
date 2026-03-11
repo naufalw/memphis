@@ -1,4 +1,5 @@
 import argparse
+import re
 import subprocess
 
 
@@ -82,8 +83,16 @@ def main() -> None:
     gdb.run_cmd("-exec-run")
 
     lines = gdb.cmd("-stack-list-variables --all-values")
-    for l in lines:
-        print(l)
+
+    output = " ".join(lines)
+    names = re.findall(r'name="(\w+)"', output)
+    variables = []
+    for name in names:
+        addr = parse_addr(" ".join(gdb.cmd(f"print/x &{name}")))
+        typ = parse_type(" ".join(gdb.cmd(f"whatis {name}")))
+        size = parse_size(" ".join(gdb.cmd(f"print sizeof({name})")))
+        variables.append({"name": name, "addr": addr, "type": typ, "size": size})
+        print(f"{name}: addr={addr} type={typ} size={size}")
 
     gdb.close()
 
