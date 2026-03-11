@@ -38,7 +38,7 @@ def read_pointer(gdb: GDB, addr: str) -> str | None:
 
 
 def heap_size(gdb: GDB, addr: str) -> int | None:
-    out = " ".join(gdb.cmd(f"print malloc_usable_size((void*){addr})"))
+    out = " ".join(gdb.cmd(f"print (size_t)malloc_usable_size((void*){addr})"))
     m = re.search(r"\$\d+ = (\d+)", out)
     size = int(m.group(1)) if m else 0
     return size if size > 0 else None

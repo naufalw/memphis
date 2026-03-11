@@ -3,7 +3,15 @@ import re
 
 from aesthetics import render_var
 from gdb import GDB
-from parser_gdb import parse_addr, parse_size, parse_type, read_bytes
+from parser_gdb import (
+    heap_size,
+    is_pointer,
+    parse_addr,
+    parse_size,
+    parse_type,
+    read_bytes,
+    read_pointer,
+)
 
 
 def main() -> None:
@@ -40,6 +48,27 @@ def main() -> None:
     for var in variables:
         raw = read_bytes(gdb, var["addr"], var["size"])
         render_var(var, raw)
+
+        if is_pointer(var["type"]):
+            target = read_pointer(gdb, var["addr"])
+            if target:
+                print(f"  Points to ──→  {target}")
+                hsize = heap_size(gdb, target)
+                if hsize:
+                    print(f"\n  [HEAP {target}]  {hsize} bytes  ←── {var['name']}")
+                    heap_raw = read_bytes(gdb, target, hsize)
+                    render_var(
+                        {
+                            "name": "",
+                            "addr": target,
+                            "type": var["type"],
+                            "size": hsize,
+                        },
+                        heap_raw,
+                        top_bar=False,
+                    )
+
+            print("  " + "-" * 70)
 
     gdb.close()
 
