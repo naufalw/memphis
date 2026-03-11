@@ -1,66 +1,8 @@
 import argparse
 import re
-import subprocess
 
-
-class GDB:
-    """
-    GDB wrapper hehe.
-    """
-
-    def __init__(self, binary: str):
-        self.proc = subprocess.Popen(
-            ["gdb", "--interpreter=mi2", "--quiet", binary],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-
-    def _readline(self) -> str:
-        "Read output line from gdb"
-        while True:
-            line = self.proc.stdout.readline()
-            if line:
-                return line.strip()
-
-    def _drain(self):
-        "Drain unnecessary yap from gdb"
-        while True:
-            if self._readline().startswith("(gdb)"):
-                return
-
-    def cmd(self, c: str) -> list[str]:
-        """for commands ends with (gdb)"""
-        self.proc.stdin.write(c + "\n")
-        self.proc.stdin.flush()
-        lines = []
-        while True:
-            l = self._readline()
-            if l.startswith("(gdb)"):
-                return lines
-            lines.append(l)
-
-    def run_cmd(self, c: str) -> list[str]:
-        """for commands ends with *stopped"""
-        self.proc.stdin.write(c + "\n")
-        self.proc.stdin.flush()
-        lines = []
-        while True:
-            l = self._readline()
-            lines.append(l)
-            if l.startswith("*stopped"):
-                self._drain()
-                return lines
-
-    def close(self):
-        try:
-            self.proc.stdin.write("-gdb-exit\n")
-            self.proc.stdin.flush()
-        except Exception:
-            pass
-        self.proc.terminate()
+from gdb import GDB
+from parser_gdb import parse_addr, parse_size, parse_type, read_bytes
 
 
 def main() -> None:
@@ -93,6 +35,10 @@ def main() -> None:
         size = parse_size(" ".join(gdb.cmd(f"print sizeof({name})")))
         variables.append({"name": name, "addr": addr, "type": typ, "size": size})
         print(f"{name}: addr={addr} type={typ} size={size}")
+
+    for var in variables:
+        raw = read_bytes(gdb, var["addr"], var["size"])
+        print(f"{var['name']}: {raw}")
 
     gdb.close()
 
