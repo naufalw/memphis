@@ -1,3 +1,7 @@
+import sys
+import termios
+import tty
+
 GRN = "\033[92m"
 CYN = "\033[96m"
 YEL = "\033[93m"
@@ -30,11 +34,24 @@ def render_var(var, raw, top_bar=True):
     rows = [raw[i : i + max_cols] for i in range(0, len(raw), max_cols)]
     base = int(var["addr"], 16)
 
+    first_addr = hex(base)
+    pad = " " * (2 + len(first_addr) + 3)
+    ruler = "".join(
+        f"{('+' + str(i)).center(3)}   " for i in range(min(max_cols, len(raw)))
+    )
+    print(f"{pad}{ruler}")
+
     for ri, row in enumerate(rows):
         row_addr = hex(base + ri * max_cols)
         cells = separator.join(fmt_byte(b, is_char) for b in row)
         print(f"  {row_addr} │ {cells} │")
 
-        pad = " " * (2 + len(row_addr) + 3)
-        ruler = "".join(f"{('+' + str(i)).center(3)}   " for i in range(len(row)))
-        print(f"{pad}{ruler}")
+
+def read_key() -> str:
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        return sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
