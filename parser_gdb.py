@@ -42,3 +42,8 @@ def heap_size(gdb: GDB, addr: str) -> int | None:
     m = re.search(r"\$\d+ = (\d+)", out)
     size = int(m.group(1)) if m else 0
     return size if size > 0 else None
+
+
+def is_heap_address(addr: str) -> bool:
+    val = int(addr, 16)
+    return val < 0x7F0000000000
