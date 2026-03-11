@@ -302,8 +302,6 @@ def main() -> None:
     else:
         gdb.run_cmd("-exec-run")
 
-    gdb.run_cmd("-exec-run")
-
     snapshot(gdb, get_variables(gdb))
 
     while True:
