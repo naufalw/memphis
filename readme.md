@@ -28,16 +28,19 @@ python3 main.py ./myprogram --func main
 
 # for programs that read stdin (scanf etc.)
 python3 main.py ./myprogram --line 20 --input "3 10 20 30"
+
+# command line arguments
+python3 main.py ./myprogram --line 20 --args abc abc abc
 ```
 
 **3 — Navigate:**
 
-| Key | Action |
-|-----|--------|
-| `n` | Next line (step over) |
-| `s` | Step into function call |
+| Key | Action                      |
+| --- | --------------------------- |
+| `n` | Next line (step over)       |
+| `s` | Step into function call     |
 | `r` | Continue to next breakpoint |
-| `q` | Quit |
+| `q` | Quit                        |
 
 No Enter needed — keypresses register instantly.
 

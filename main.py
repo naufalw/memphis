@@ -183,6 +183,10 @@ def is_heap_address(addr: str) -> bool:
     return val < 0x7F0000000000
 
 
+def is_double_pointer(typ: str) -> bool:
+    return "**" in typ
+
+
 def snapshot(gdb, variables):
     print("\033[2J\033[3J\033[H", end="", flush=True)
     fname, func, lineno, src = current_line(gdb)
@@ -196,6 +200,19 @@ def snapshot(gdb, variables):
             target = read_pointer(gdb, var["addr"])
             if target:
                 print(f"  Points to ──→  {target}")
+                if is_double_pointer(var["type"]):
+                    array_addr = read_pointer(gdb, var["addr"])
+                    i = 0
+                    while True:
+                        ptr_addr = hex(int(array_addr, 16) + i * 8)
+                        string_addr = read_pointer(gdb, ptr_addr)
+                        if not string_addr or int(string_addr, 16) == 0:
+                            break
+                        raw = read_bytes(gdb, string_addr, 32)
+                        trimmed = raw[: raw.index(0)] if 0 in raw else raw
+                        string = "".join(chr(b) for b in trimmed)
+                        print(f'  argv[{i}] ──→ {string_addr}  "{string}"')
+                        i += 1
                 if is_heap_address(target):
                     hsize = heap_size(gdb, target)
                     if hsize:
@@ -277,7 +294,14 @@ def main() -> None:
         "-i",
         help="Stdin to feed the program, like '3 10 20 30' ",
     )
+    p.add_argument(
+        "--args",
+        "-a",
+        nargs="+",
+        help="argv to pass e.g. --args hello world",
+    )
     args = p.parse_args()
+    argv_str = " ".join(args.args) if args.args else ""
 
     gdb = GDB(args.binary)
 
@@ -297,10 +321,10 @@ def main() -> None:
         tf.write(args.input)
         tf.flush()
         tf.close()
-        gdb.run_cmd(f'-interpreter-exec console "run < {tf.name}"')
+        gdb.run_cmd(f'-interpreter-exec console "run {argv_str} < {tf.name}"')
         os.unlink(tf.name)
     else:
-        gdb.run_cmd("-exec-run")
+        gdb.run_cmd(f"-exec-run {argv_str}")
 
     snapshot(gdb, get_variables(gdb))
 
