@@ -1,20 +1,186 @@
 import argparse
 import os
 import re
+import subprocess
+import sys
 import tempfile
+import termios
+import tty
+from typing import TYPE_CHECKING
 
-from aesthetics import GRN, R, read_key, render_var
-from gdb import GDB
-from parser_gdb import (
-    heap_size,
-    is_heap_address,
-    is_pointer,
-    parse_addr,
-    parse_size,
-    parse_type,
-    read_bytes,
-    read_pointer,
-)
+if TYPE_CHECKING:
+    from io import TextIOWrapper
+
+# ===== AESTHETICS ======
+
+GRN = "\033[92m"
+CYN = "\033[96m"
+YEL = "\033[93m"
+DIM = "\033[2m"
+R = "\033[0m"
+
+
+def fmt_byte(b: int, char_mode: bool = False) -> str:
+    if b == 0:
+        return f"{DIM} \\0{R}"
+
+    if char_mode:
+        return f"{YEL}{chr(b).center(3)}{R}"
+
+    return f"{YEL}{b:3d}{R}"
+
+
+def render_var(var, raw, top_bar=True):
+    name = var["name"]
+    typ = var["type"]
+    size = var["size"]
+    is_char = "char" in typ
+
+    if top_bar:
+        print("  " + "-" * 70)
+    print(f"  {CYN}{name}{R}" + f" {typ} ({size} bytes)")
+
+    max_cols = 8
+    separator = f" {DIM}│{R} "
+    rows = [raw[i : i + max_cols] for i in range(0, len(raw), max_cols)]
+    base = int(var["addr"], 16)
+
+    first_addr = hex(base)
+    pad = " " * (2 + len(first_addr) + 3)
+    ruler = "".join(
+        f"{('+' + str(i)).center(3)}   " for i in range(min(max_cols, len(raw)))
+    )
+    print(f"{pad}{ruler}")
+
+    for ri, row in enumerate(rows):
+        row_addr = hex(base + ri * max_cols)
+        cells = separator.join(fmt_byte(b, is_char) for b in row)
+        print(f"  {row_addr} │ {cells} │")
+
+
+def read_key() -> str:
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        return sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+# ===== GDB Wrapper ======
+class GDB:
+    """
+    GDB wrapper hehe.
+    """
+
+    def __init__(self, binary: str) -> None:
+        self.proc = subprocess.Popen(
+            ["gdb", "--interpreter=mi2", "--quiet", binary],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,
+        )
+        assert self.proc.stdin is not None
+        assert self.proc.stdout is not None
+        self.stdin: TextIOWrapper = self.proc.stdin  # type: ignore[assignment]
+        self.stdout: TextIOWrapper = self.proc.stdout  # type: ignore[assignment]
+        self._drain()
+
+    def _readline(self) -> str:
+        "Read output line from gdb"
+        while True:
+            line = self.stdout.readline()
+            if line:
+                return line.strip()
+
+    def _drain(self) -> None:
+        "Drain unnecessary yap from gdb"
+        while True:
+            if self._readline().startswith("(gdb)"):
+                return
+
+    def cmd(self, c: str) -> list[str]:
+        """for commands ends with (gdb)"""
+        self.stdin.write(c + "\n")
+        self.stdin.flush()
+        lines: list[str] = []
+        while True:
+            line = self._readline()
+            if line.startswith("(gdb)"):
+                return lines
+            lines.append(line)
+
+    def run_cmd(self, c: str) -> list[str]:
+        """for commands ends with *stopped"""
+        self.stdin.write(c + "\n")
+        self.stdin.flush()
+        lines: list[str] = []
+        while True:
+            line = self._readline()
+            lines.append(line)
+            if line.startswith("*stopped"):
+                self._drain()
+                return lines
+
+    def close(self) -> None:
+        try:
+            self.stdin.write("-gdb-exit\n")
+            self.stdin.flush()
+        except Exception:
+            pass
+        self.proc.terminate()
+
+
+# ==== GDB PARSER ======
+
+
+def parse_addr(raw: str) -> str | None:
+    m = re.search(r"\$\d+ = (0x[0-9a-f]+)", raw)
+    return m.group(1) if m else None
+
+
+def parse_type(raw: str) -> str | None:
+    m = re.search(r"type = ([^\\]+)", raw)
+    return m.group(1).strip() if m else None
+
+
+def parse_size(raw: str) -> int | None:
+    m = re.search(r"\$\d+ = (\d+)", raw)
+    return int(m.group(1)) if m else None
+
+
+def read_bytes(gdb: GDB, addr: str, size: int) -> list[int]:
+    out = " ".join(gdb.cmd(f"-data-read-memory-bytes {addr} {size}"))
+    m = re.search(r'contents="([0-9a-f]+)"', out)
+    if not m:
+        return []
+    hex_str = m.group(1)
+    return [int(hex_str[i : i + 2], 16) for i in range(0, len(hex_str), 2)]
+
+
+def is_pointer(typ: str) -> bool:
+    return typ.strip().endswith("*")
+
+
+def read_pointer(gdb: GDB, addr: str) -> str | None:
+    out = " ".join(gdb.cmd(f"print/x *((unsigned long long *){addr})"))
+    m = re.search(r"\$\d+ = (0x[0-9a-f]+)", out)
+    return m.group(1) if m else None
+
+
+def heap_size(gdb: GDB, addr: str) -> int | None:
+    out = " ".join(gdb.cmd(f"print (size_t)malloc_usable_size((void*){addr})"))
+    m = re.search(r"\$\d+ = (\d+)", out)
+    size = int(m.group(1)) if m else 0
+    return size if size > 0 else None
+
+
+def is_heap_address(addr: str) -> bool:
+    val = int(addr, 16)
+    return val < 0x7F0000000000
 
 
 def snapshot(gdb, variables):
