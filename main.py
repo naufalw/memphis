@@ -1,6 +1,7 @@
 import argparse
 import re
 
+from aesthetics import render_var
 from gdb import GDB
 from parser_gdb import parse_addr, parse_size, parse_type, read_bytes
 
@@ -34,11 +35,11 @@ def main() -> None:
         typ = parse_type(" ".join(gdb.cmd(f"whatis {name}")))
         size = parse_size(" ".join(gdb.cmd(f"print sizeof({name})")))
         variables.append({"name": name, "addr": addr, "type": typ, "size": size})
-        print(f"{name}: addr={addr} type={typ} size={size}")
+        # print(f"{name}: addr={addr} type={typ} size={size}")
 
     for var in variables:
         raw = read_bytes(gdb, var["addr"], var["size"])
-        print(f"{var['name']}: {raw}")
+        render_var(var, raw)
 
     gdb.close()
 
